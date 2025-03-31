@@ -154,11 +154,7 @@ async fn new_item(
         return Ok(resp);
     }
 
-    println!("{:?}", req);
-
     let whole_body = req.collect().await?.to_bytes().to_vec();
-
-    println!("{:?}", whole_body);
 
     let str_body = std::str::from_utf8(&whole_body);
 
@@ -171,7 +167,7 @@ async fn new_item(
     }
 
     // now give it a last seen time of now
-    let mut item = item.unwrap();  // unwrap is safe because we checked it above
+    let mut item = item.unwrap(); // unwrap is safe because we checked it above
     item.last_seen = Some(Utc::now().timestamp() as u64);
 
     let res = item.save();
@@ -363,8 +359,8 @@ async fn dispatch(
         "/all" => all_items(req).await,
         path if path.starts_with("/item/") => item(req).await,
         "/modify" => modify_item_endpoint(req).await,
-        "/delete" => delete_item_endpoint(req).await,
-        "/log" => log_item(req).await,
+        path if path.starts_with("/delete/") => delete_item_endpoint(req).await,
+        path if path.starts_with("/log/") => log_item(req).await,
         _ => {
             let mut resp = Response::new(full("Not found"));
             *resp.status_mut() = hyper::StatusCode::NOT_FOUND;
