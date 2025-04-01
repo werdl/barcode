@@ -18,7 +18,7 @@ pub struct Item {
     location: String,
 }
 
-async fn new_item(item: Item) -> Result<(), reqwest::Error> {
+async fn new_item(item: Item) -> Result<u16, reqwest::Error> {
     let client = reqwest::Client::new();
 
     let res = client
@@ -27,11 +27,11 @@ async fn new_item(item: Item) -> Result<(), reqwest::Error> {
             SERVER.lock().unwrap().get().expect("Server not set")
         ))
         .body(serde_json::to_string(&item).expect("Failed to serialize item"));
-    res.send().await?;
-    Ok(())
+
+    Ok(res.send().await?.status().as_u16())
 }
 
-async fn modify_item(item: Item) -> Result<(), reqwest::Error> {
+async fn modify_item(item: Item) -> Result<u16, reqwest::Error> {
     let client = reqwest::Client::new();
 
     let res = client
@@ -40,11 +40,11 @@ async fn modify_item(item: Item) -> Result<(), reqwest::Error> {
             SERVER.lock().unwrap().get().expect("Server not set")
         ))
         .body(serde_json::to_string(&item).expect("Failed to serialize item"));
-    res.send().await?;
-    Ok(())
+
+    Ok(res.send().await?.status().as_u16())
 }
 
-async fn delete_item(barcode: u64) -> Result<(), reqwest::Error> {
+async fn delete_item(barcode: u64) -> Result<u16, reqwest::Error> {
     let client = reqwest::Client::new();
 
     let res = client.get(format!(
@@ -53,11 +53,10 @@ async fn delete_item(barcode: u64) -> Result<(), reqwest::Error> {
         barcode
     ));
 
-    res.send().await?;
-    Ok(())
+    Ok(res.send().await?.status().as_u16())
 }
 
-async fn get_all_items() -> Result<(), reqwest::Error> {
+async fn get_all_items() -> Result<u16, reqwest::Error> {
     let client = reqwest::Client::new();
 
     let res = client.get(format!(
@@ -65,10 +64,16 @@ async fn get_all_items() -> Result<(), reqwest::Error> {
         SERVER.lock().unwrap().get().expect("Server not set")
     ));
 
-    let items = res.send().await?.text().await?;
+    let items = res.send().await?;
+
+    if items.status().as_u16() != 200 {
+        return Ok(items.status().as_u16());
+    }
+
+    let items = items.text().await?;
 
     let actual_items = serde_json::from_str::<serde_json::Value>(&items)
-        .expect("Failed to deserialize items")["Ok"]
+        .expect("Failed to deserialize items")
         .clone();
 
     for item in actual_items.as_array().expect("Failed to get items") {
@@ -87,10 +92,12 @@ async fn get_all_items() -> Result<(), reqwest::Error> {
         );
     }
 
-    Ok(())
+    println!("Retrieved {} items", actual_items.as_array().expect("Failed to get items").len());
+
+    Ok(200)
 }
 
-async fn see_item(barcode: u64) -> Result<(), reqwest::Error> {
+async fn see_item(barcode: u64) -> Result<u16, reqwest::Error> {
     let client = reqwest::Client::new();
 
     let res = client.get(format!(
@@ -99,12 +106,17 @@ async fn see_item(barcode: u64) -> Result<(), reqwest::Error> {
         barcode
     ));
 
-    let item = res.send().await?.text().await?;
+    let item = res.send().await?;
+
+    if item.status().as_u16() != 200 {
+        return Ok(item.status().as_u16());
+    }
+
+    let item = item.text().await?;
 
     let actual_item = serde_json::from_str::<serde_json::Value>(&item)
         .expect("Failed to deserialize item")
         .clone();
-
 
     #[allow(deprecated)]
     let last_seen = chrono::NaiveDateTime::from_timestamp(
@@ -120,10 +132,10 @@ async fn see_item(barcode: u64) -> Result<(), reqwest::Error> {
         actual_item["barcode"], actual_item["name"], actual_item["location"], formatted_last_seen
     );
 
-    Ok(())
+    Ok(200)
 }
 
-async fn log_item(barcode: u64) -> Result<(), reqwest::Error> {
+async fn log_item(barcode: u64) -> Result<u16, reqwest::Error> {
     let client = reqwest::Client::new();
 
     let res = client.get(format!(
@@ -132,8 +144,7 @@ async fn log_item(barcode: u64) -> Result<(), reqwest::Error> {
         barcode
     ));
 
-    res.send().await?;
-    Ok(())
+    Ok(res.send().await?.status().as_u16())
 }
 
 fn process_new_item(barcode: u64) -> Item {
@@ -264,49 +275,73 @@ async fn main() {
         std::io::stdin()
             .read_line(&mut input)
             .expect("Failed to read input");
-        match input.trim().split_whitespace().next().expect("Failed to parse command") {
+        match input
+            .trim()
+            .split_whitespace()
+            .next()
+            .expect("Failed to parse command")
+        {
             "new" => {
                 let args = get_args(input.to_string());
                 for barcode in args.clone() {
-                    new_item(process_new_item(barcode))
-                        .await
-                        .expect("Failed to create item");
+                    match new_item(process_new_item(barcode)).await {
+                        Ok(status) if status == 200 => {},
+                        Ok(status) => eprintln!("Failed to create item with barcode {}: HTTP {}", barcode, status),
+                        Err(e) => eprintln!("Error creating item with barcode {}: {}", barcode, e),
+                    }
                 }
                 println!("Created {} items", args.len());
-
             }
             "modify" => {
                 let args = get_args(input.to_string());
                 for barcode in args.clone() {
-                    modify_item(process_modify_item(barcode))
-                        .await
-                        .expect("Failed to modify item");
+                    match modify_item(process_modify_item(barcode)).await {
+                        Ok(status) if status == 200 => {},
+                        Ok(status) => eprintln!("Failed to modify item with barcode {}: HTTP {}", barcode, status),
+                        Err(e) => eprintln!("Error modifying item with barcode {}: {}", barcode, e),
+                    }
                 }
                 println!("Modified {} items", args.len());
             }
             "delete" => {
                 let args = get_args(input.to_string());
                 for barcode in args.clone() {
-                    delete_item(barcode).await.expect("Failed to delete item");
+                    match delete_item(barcode).await {
+                        Ok(status) if status == 200 => {},
+                        Ok(status) => eprintln!("Failed to delete item with barcode {}: HTTP {}", barcode, status),
+                        Err(e) => eprintln!("Error deleting item with barcode {}: {}", barcode, e),
+                    }
                 }
                 println!("Deleted {} items", args.len());
-
             }
             "log" => {
                 let args = get_args(input.to_string());
                 for barcode in args.clone() {
-                    log_item(barcode).await.expect("Failed to see item");
+                    match log_item(barcode).await {
+                        Ok(status) if status == 200 => {},
+                        Ok(status) => eprintln!("Failed to log item with barcode {}: HTTP {}", barcode, status),
+                        Err(e) => eprintln!("Error logging item with barcode {}: {}", barcode, e),
+                    }
                 }
                 println!("Logged {} items", args.len());
-
             }
             "all" => {
-                get_all_items().await.expect("Failed to get all items");
+                match get_all_items().await {
+                    Ok(status) if status == 200 => {}, // printing handled by get_all_items
+                    Ok(status) => eprintln!("Failed to retrieve all items: HTTP {}", status),
+                    Err(e) => eprintln!("Error retrieving all items: {}", e),
+                }
             }
             "see" => {
-                for barcode in get_args(input.to_string()) {
-                    see_item(barcode).await.expect("Failed to get item");
+                let args = get_args(input.to_string());
+                for barcode in args.clone() {
+                    match see_item(barcode).await {
+                        Ok(status) if status == 200 => {},
+                        Ok(status) => eprintln!("Failed to retrieve item with barcode {}: HTTP {}", barcode, status),
+                        Err(e) => eprintln!("Error retrieving item with barcode {}: {}", barcode, e),
+                    }
                 }
+                println!("Retrieved {} items", args.len());
             }
             "server" => {
                 // change the server ip
@@ -331,7 +366,8 @@ async fn main() {
             }
             "quit" => break,
             _ => {
-                println!("
+                println!(
+                    "
 Commands:
 new <barcode1> <barcode2> ... - create new item
 modify <barcode1> <barcode2> ... - modify item
@@ -343,7 +379,8 @@ server - change server ip
 quit - quit
 
 server will be written to and read from barcode.cfg
-");
+"
+                );
             }
         }
     }

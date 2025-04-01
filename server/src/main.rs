@@ -1,12 +1,7 @@
-use std::io::{self, Read};
-
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::{
-    Request, Response,
-    body::{Body, Bytes, Incoming},
-    server::conn::{http1, http2},
-    service::service_fn,
+    body::{Body, Bytes, Incoming}, header::USER_AGENT, server::conn::http1, service::service_fn, Request, Response
 };
 use hyper_util::rt::TokioIo;
 use rusqlite::{Connection, params};
@@ -125,11 +120,16 @@ pub fn delete_item(barcode: &str) -> Result<(), String> {
 
 pub fn modify_item(item: Item) -> Result<(), String> {
     let conn = Connection::open(DB_NAME).map_err(|e| e.to_string())?;
-    conn.execute(
+    let rows_affected = conn.execute(
         "UPDATE items SET name = ?1, location = ?2, last_seen = ?3 WHERE barcode = ?4",
         params![item.name, item.location, item.last_seen, item.barcode],
     )
     .map_err(|e| e.to_string())?;
+
+    if rows_affected == 0 {
+        return Err("Item not found".to_string());
+    }
+
     Ok(())
 }
 
@@ -141,6 +141,19 @@ fn full<T: Into<Bytes>>(chunk: T) -> BoxBody<Bytes, hyper::Error> {
 
 fn ok() -> BoxBody<Bytes, hyper::Error> {
     full("OK")
+}
+
+/// remove all non-alphanumeric characters from a string (all fields can have this applied)
+fn sanitize(s: &str) -> String {
+    s.replace(|c: char| !c.is_ascii_alphanumeric(), "")
+}
+
+impl Item {
+    /// remove all non-alphanumeric characters from all fields
+    fn sanitize(&mut self) {
+        self.name = sanitize(&self.name);
+        self.location = sanitize(&self.location);
+    }
 }
 
 // endpoint for new item (hyper)
@@ -168,6 +181,7 @@ async fn new_item(
 
     // now give it a last seen time of now
     let mut item = item.unwrap(); // unwrap is safe because we checked it above
+    item.sanitize();
     item.last_seen = Some(Utc::now().timestamp() as u64);
 
     let res = item.save();
@@ -192,6 +206,11 @@ async fn all_items(
         *resp.status_mut() = hyper::StatusCode::INTERNAL_SERVER_ERROR;
         return Ok(resp);
     }
+
+    let items: Vec<Item> = items.unwrap().iter_mut().map(|i| {
+        i.sanitize();
+        i.clone()
+    }).collect();
 
     let items_json = serde_json::to_string(&items);
 
@@ -228,13 +247,24 @@ async fn item(
 
     let item = load_item(barcode); // unwrap is safe because we checked it above
 
-    if item.is_err() {
-        let mut resp = Response::new(full(item.unwrap_err()));
-        *resp.status_mut() = hyper::StatusCode::INTERNAL_SERVER_ERROR;
+    if let Err(err) = item {
+        let mut resp = if err == "Item not found" {
+            Response::new(full("Item not found"))
+        } else {
+            Response::new(full(err.clone()))
+        };
+        *resp.status_mut() = if err == "Item not found" {
+            hyper::StatusCode::NOT_FOUND
+        } else {
+            hyper::StatusCode::INTERNAL_SERVER_ERROR
+        };
         return Ok(resp);
     }
 
-    let item_json = serde_json::to_string(&item.unwrap()); // unwrap is safe because we checked it above
+    let mut item = item.unwrap(); // unwrap is safe because we checked it above
+    item.sanitize();
+
+    let item_json = serde_json::to_string(&item);
 
     if item_json.is_err() {
         let mut resp = Response::new(full(item_json.unwrap_err().to_string()));
@@ -279,13 +309,22 @@ async fn modify_item_endpoint(
     }
 
     let mut item = item.unwrap(); // unwrap is safe because we checked it above
+    item.sanitize();
     item.last_seen = Some(Utc::now().timestamp() as u64);
 
     let res = modify_item(item);
 
-    if res.is_err() {
-        let mut resp = Response::new(full(res.unwrap_err()));
-        *resp.status_mut() = hyper::StatusCode::INTERNAL_SERVER_ERROR;
+    if let Err(err) = res {
+        let mut resp = if err == "Item not found" {
+            Response::new(full("Item not found"))
+        } else {
+            Response::new(full(err.clone()))
+        };
+        *resp.status_mut() = if err == "Item not found" {
+            hyper::StatusCode::NOT_FOUND
+        } else {
+            hyper::StatusCode::INTERNAL_SERVER_ERROR
+        };
         return Ok(resp);
     }
 
@@ -354,7 +393,13 @@ async fn log_item(
 async fn dispatch(
     req: Request<Incoming>,
 ) -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
-    match req.uri().path() {
+    let user_agent = match req.headers().get(USER_AGENT) {
+        Some(user_agent) => user_agent.to_str().unwrap_or("unknown"),
+        None => "unknown",
+    };
+
+    print!("{} {} from {}", req.method(), req.uri().path(), user_agent);
+    let res = match req.uri().path() {
         "/new" => new_item(req).await,
         "/all" => all_items(req).await,
         path if path.starts_with("/item/") => item(req).await,
@@ -366,7 +411,15 @@ async fn dispatch(
             *resp.status_mut() = hyper::StatusCode::NOT_FOUND;
             Ok(resp)
         }
+    };
+
+    if let Ok(response) = res.as_ref() {
+        println!(" -> {}", response.status());
+    } else {
+        eprintln!(" -> Couldn't process request (unknown error)");
     }
+
+    res
 }
 
 fn setup_if_not_exists() {
