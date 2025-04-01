@@ -11,6 +11,20 @@ lazy_static! {
     static ref SERVER: Mutex<OnceCell<String>> = Mutex::new(OnceCell::new());
 }
 
+const HELP: &str = "
+Commands:
+new <barcode1> <barcode2> ... - create new item
+modify <barcode1> <barcode2> ... - modify item
+delete <barcode1> <barcode2> ... - delete item
+log <barcode1> <barcode2> ... - see item
+all - get all items
+see <barcode1> <barcode2> ... - get item
+server - change server ip
+<barcode> - create new item
+quit - quit
+
+server will be written to and read from barcode.cfg";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {
     name: String,
@@ -365,22 +379,20 @@ async fn main() {
                     .expect("Failed to write to barcode.cfg");
             }
             "quit" => break,
-            _ => {
-                println!(
-                    "
-Commands:
-new <barcode1> <barcode2> ... - create new item
-modify <barcode1> <barcode2> ... - modify item
-delete <barcode1> <barcode2> ... - delete item
-log <barcode1> <barcode2> ... - see item
-all - get all items
-see <barcode1> <barcode2> ... - get item
-server - change server ip
-quit - quit
+            inp => {
+                if inp.chars().all(char::is_numeric) {
+                    // create a new item
+                    let barcode: u64 = inp.parse().expect("Failed to parse barcode");
 
-server will be written to and read from barcode.cfg
-"
-                );
+                    match new_item(process_new_item(barcode)).await {
+                        Ok(status) if status == 200 => {},
+                        Ok(status) => eprintln!("Failed to create item with barcode {}: HTTP {}", barcode, status),
+                        Err(e) => eprintln!("Error creating item with barcode {}: {}", barcode, e),
+                    }
+
+                } else {
+                    println!("{}", HELP);
+                }
             }
         }
     }

@@ -145,7 +145,7 @@ fn ok() -> BoxBody<Bytes, hyper::Error> {
 
 /// remove all non-alphanumeric characters from a string (all fields can have this applied)
 fn sanitize(s: &str) -> String {
-    s.replace(|c: char| !c.is_ascii_alphanumeric(), "")
+    s.replace(|c: char| !c.is_ascii_alphanumeric() && !c.is_ascii_whitespace(), "")
 }
 
 impl Item {
@@ -186,9 +186,17 @@ async fn new_item(
 
     let res = item.save();
 
-    if res.is_err() {
-        let mut resp = Response::new(full(res.unwrap_err()));
-        *resp.status_mut() = hyper::StatusCode::INTERNAL_SERVER_ERROR;
+    if let Err(err) = res {
+        let mut resp = if err.contains("UNIQUE constraint failed") {
+            Response::new(full("Item already exists"))
+        } else {
+            Response::new(full(err.clone()))
+        };
+        *resp.status_mut() = if err.contains("UNIQUE constraint failed") {
+            hyper::StatusCode::CONFLICT
+        } else {
+            hyper::StatusCode::INTERNAL_SERVER_ERROR
+        };
         return Ok(resp);
     }
 
