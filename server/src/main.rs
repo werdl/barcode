@@ -113,8 +113,12 @@ pub fn load_item(barcode: u64) -> Result<Item, String> {
 
 pub fn delete_item(barcode: &str) -> Result<(), String> {
     let conn = Connection::open(DB_NAME).map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM items WHERE barcode = ?1", params![barcode])
+    let rows_affected = conn
+        .execute("DELETE FROM items WHERE barcode = ?1", params![barcode])
         .map_err(|e| e.to_string())?;
+    if rows_affected == 0 {
+        return Err("Item not found".to_string());
+    }
     Ok(())
 }
 
@@ -353,9 +357,17 @@ async fn delete_item_endpoint(
 
     let res = delete_item(barcode.unwrap()); // unwrap is safe because we checked it above
 
-    if res.is_err() {
-        let mut resp = Response::new(full(res.unwrap_err()));
-        *resp.status_mut() = hyper::StatusCode::INTERNAL_SERVER_ERROR;
+    if let Err(err) = res {
+        let mut resp = if err == "Item not found" {
+            Response::new(full("Item not found"))
+        } else {
+            Response::new(full(err.clone()))
+        };
+        *resp.status_mut() = if err == "Item not found" {
+            hyper::StatusCode::NOT_FOUND
+        } else {
+            hyper::StatusCode::INTERNAL_SERVER_ERROR
+        };
         return Ok(resp);
     }
 
@@ -382,18 +394,25 @@ async fn log_item(
         return Ok(resp);
     }
 
-    if conn
+    let rows_affected = conn
         .unwrap() // unwrap is safe because we checked it above
         .execute(
             "UPDATE items SET last_seen = ?1 WHERE barcode = ?2",
             params![Utc::now().timestamp() as u64, barcode],
-        )
-        .is_err()
-    {
-        // unwrap is safe because we checked it above
-        let mut resp = Response::new(full("Failed to log item"));
-        *resp.status_mut() = hyper::StatusCode::INTERNAL_SERVER_ERROR;
-        return Ok(resp);
+        );
+
+    match rows_affected {
+        Ok(0) => {
+            let mut resp = Response::new(full("Item not found"));
+            *resp.status_mut() = hyper::StatusCode::NOT_FOUND;
+            return Ok(resp);
+        }
+        Ok(_) => {}
+        Err(_) => {
+            let mut resp = Response::new(full("Failed to log item"));
+            *resp.status_mut() = hyper::StatusCode::INTERNAL_SERVER_ERROR;
+            return Ok(resp);
+        }
     }
     Ok(Response::new(ok()))
 }
