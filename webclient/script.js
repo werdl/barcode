@@ -13,31 +13,36 @@ function getAllItems() {
 
 // add a new item
 function addItem(name, barcode, location) {
-    const item = { name, barcode, location };
+    let int_barcode = parseInt(barcode);
+    if (isNaN(int_barcode)) {
+        console.error('Invalid barcode:', barcode);
+        return;
+    }
+    const item = { name, "barcode": int_barcode, location };
+    console.log(JSON.stringify(item));
     fetch(`http://${SERVER}/new`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
         body: JSON.stringify(item)
     })
         .then(response => response.json())
-        .then(data => console.log('Added item:', data))
+        .then(data => console.log('Added item: ', item))
         .catch(error => console.error('Error adding item:', error));
 }
 
 // modify an item
 function modifyItem(name, barcode, location) {
-    const item = { name, barcode, location };
+    let int_barcode = parseInt(barcode);
+    if (isNaN(int_barcode)) {
+        console.error('Invalid barcode:', barcode);
+        return;
+    }
+    const item = { name, "barcode": int_barcode, location };
     fetch(`http://${SERVER}/modify`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
         body: JSON.stringify(item)
     })
         .then(response => response.json())
-        .then(data => console.log('Modified item:', data))
+        .then(data => console.log('Modified item:', item))
         .catch(error => console.error('Error modifying item:', error));
 }
 
@@ -80,7 +85,7 @@ function getAllItemsDOM() {
 
             // Create table headers
             const headerRow = document.createElement('tr');
-            ['Name', 'Barcode', 'Location'].forEach(headerText => {
+            ['Name', 'Barcode', 'Location', 'Last Seen'].forEach(headerText => {
                 const th = document.createElement('th');
                 th.textContent = headerText;
                 headerRow.appendChild(th);
@@ -97,10 +102,10 @@ function getAllItemsDOM() {
                     popup.className = 'popup';
                     popup.innerHTML = `
                         <h2>${item.name}</h2>
-                        <button onclick="modifyItem('${item.name}', '${item.barcode}', '${item.location}');getAllItemsDOM()">Modify</button>
+                        <button onclick="modifyItemUI('${item.barcode}');getAllItemsDOM()">Modify</button>
                         <button onclick="deleteItem('${item.barcode}');getAllItemsDOM()">Delete</button>
                         <button onclick="logItem('${item.barcode}');getAllItemsDOM()">Log</button>
-                        <button onclick="closePopup('${item.barcode}');getAllItemsDOM()">Close</button>
+                        <button onclick="closePopup();getAllItemsDOM()">Close</button>
                     `;
                     document.body.appendChild(popup);
                     popup.style.display = 'block';
@@ -134,10 +139,60 @@ function getAllItemsDOM() {
         .catch(error => console.error('Error fetching all items:', error));
 }
 
-function closePopup(barcode) {
+function addItemUI() {
+    closePopup(); // Close any existing popup
+
+    const popup = document.createElement('div');
+    popup.className = 'popup';
+    popup.innerHTML = `
+        <h2>Add Item</h2>
+        <label for="name">Name:</label>
+        <input type="text" id="name" required>
+        <label for="barcode">Barcode:</label>
+        <input type="text" id="barcode" required>
+        <label for="location">Location:</label>
+        <input type="text" id="location" required>
+        <button onclick="addItem(document.getElementById('name').value, document.getElementById('barcode').value, document.getElementById('location').value);closePopup();getAllItemsDOM()">Add</button>
+        <button onclick="closePopup()">Close</button>
+    `;
+    document.body.appendChild(popup);
+    popup.style.display = 'block';
+}
+
+function modifyItemUI(barcode) {
+    const item = document.getElementById(barcode);
+    console.log(item)
+    if (!item) {
+        console.error('Item not found:', barcode);
+        return;
+    }
+    const name = item.cells[0].textContent;
+    const location = item.cells[2].textContent;
+
+    closePopup(); // Close any existing popup
+
+    const popup = document.createElement('div');
+    popup.className = 'popup';
+    popup.innerHTML = `
+        <h2>Modify Item (${barcode})</h2>
+        <label for="name">Name:</label>
+        <input type="text" id="name" value="${name}" required>
+        <label for="location">Location:</label>
+        <input type="text" id="location" value="${location}" required>
+        <button onclick="modifyItem(document.getElementById('name').value, ${barcode}, document.getElementById('location').value);closePopup();getAllItemsDOM()">Modify</button>
+        <button onclick="closePopup()">Close</button>
+    `;
+    document.body.appendChild(popup);
+    popup.style.display = 'block';
+}
+
+function closePopup() {
     const popup = document.querySelector(`.popup`);
     if (popup) {
         popup.style.display = 'none';
         document.body.removeChild(popup);
     }
 }
+
+// refresh every 5s
+setInterval(getAllItemsDOM, 5000);

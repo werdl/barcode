@@ -191,6 +191,7 @@ async fn new_item(
         return Ok(resp);
     }
 
+
     // now give it a last seen time of now
     let mut item = item.unwrap(); // unwrap is safe because we checked it above
     item.sanitize();

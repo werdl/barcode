@@ -1,0 +1,97 @@
+body {
+    background-color: #121212;
+    color: #ffffff;
+    font-family: monospace;
+    margin: 0;
+    padding: 0;
+}
+
+.popup {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    border: 1px solid #333333;
+    border-radius: 8px;
+    padding: 20px;
+    width: 300px;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.popup h2 {
+    margin-top: 0;
+    font-size: 1.5em;
+}
+
+.popup label {
+    display: block;
+    margin: 10px 0 5px;
+}
+
+.popup input {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #444444;
+    border-radius: 4px;
+    background-color: #2a2a2a;
+    color: #ffffff;
+}
+
+.popup button {
+    background-color: #333333;
+    color: #ffffff;
+    border: none;
+    padding: 10px 15px;
+    margin-right: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.popup button:hover {
+    background-color: #444444;
+}
+
+#table {
+    padding: 10px 15px;
+    margin: 20px auto; /* Center the button horizontally */
+    display: block; /* Make it a block element */
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#table th, #table td {
+    border: 1px solid #444444;
+    padding: 10px;
+    text-align: left;
+}
+
+#table tr:hover {
+    background-color: #444444 !important;
+    color: #ffffff !important;
+}
+
+#table th {
+    background-color: #1e1e1e;
+}
+
+#table tr:nth-child(even) {
+    background-color: #2a2a2a;
+}
+
+#table tr:nth-child(odd) {
+    background-color: #1e1e1e;
+}
+
+#addButton {
+    background-color: #333333;
+    color: #ffffff;
+    border: none;
+    padding: 10px 15px;
+    margin: 20px auto; /* Center the button horizontally */
+    display: block; /* Make it a block element */
+    border-radius: 4px;
+    cursor: pointer;
+}
