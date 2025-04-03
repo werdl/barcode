@@ -519,6 +519,33 @@ async fn dispatch(
 
             Ok(res)
         }
+        path if path.starts_with("/get_database") => {
+            let resp = fs::File::open(DB_NAME);
+            let resp: Result<Vec<u8>, std::io::Error> = resp.and_then(|file| {
+                let mut file = file;
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf).map(|_| buf)
+            });
+
+            let res: Response<BoxBody<Bytes, hyper::Error>>;
+            if resp.is_err() {
+                let mut resp = Response::new(full("Failed to read file"));
+                *resp.status_mut() = hyper::StatusCode::NOT_FOUND;
+                res = resp;
+            } else {
+                let resp = resp.unwrap();
+                let mut resp = Response::new(full(resp));
+                *resp.status_mut() = hyper::StatusCode::OK;
+                resp.headers_mut().insert(
+                    hyper::header::CONTENT_TYPE,
+                    hyper::header::HeaderValue::from_static("application/octet-stream"),
+                );
+
+                res = resp;
+            }
+
+            Ok(res)
+        }
 
         _ => {
             let mut resp = Response::new(full("Not found"));
