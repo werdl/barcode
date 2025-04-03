@@ -4,6 +4,11 @@ body {
     font-family: monospace;
     margin: 0;
     padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
 }
 
 .popup {
@@ -18,6 +23,9 @@ body {
     left: 50%;
     transform: translate(-50%, -50%);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
 }
 
 .popup h2 {
@@ -45,9 +53,9 @@ body {
     color: #ffffff;
     border: none;
     padding: 10px 15px;
-    margin-right: 10px;
     border-radius: 4px;
     cursor: pointer;
+    align-self: flex-start;
 }
 
 .popup button:hover {
@@ -55,11 +63,12 @@ body {
 }
 
 #table {
-    padding: 10px 15px;
-    margin: 20px auto; /* Center the button horizontally */
-    display: block; /* Make it a block element */
+    margin: 20px 0;
     border-radius: 4px;
     cursor: pointer;
+    width: 100%;
+    max-width: 800px;
+    display: table; /* Ensures the table behaves like a standard table */
 }
 
 #table th, #table td {
@@ -85,13 +94,16 @@ body {
     background-color: #1e1e1e;
 }
 
+
 #addButton {
     background-color: #333333;
     color: #ffffff;
     border: none;
     padding: 10px 15px;
-    margin: 20px auto; /* Center the button horizontally */
-    display: block; /* Make it a block element */
+    margin: 20px auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     border-radius: 4px;
     cursor: pointer;
 }

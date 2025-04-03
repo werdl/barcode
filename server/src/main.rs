@@ -430,6 +430,14 @@ async fn log_item(
     Ok(Response::new(ok()))
 }
 
+fn cap_at_n(n: usize, s: &str) -> String {
+    if s.len() > n {
+        format!("{}...", &s[..n])
+    } else {
+        s.to_string()
+    }
+}
+
 async fn dispatch(
     req: Request<Incoming>,
 ) -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
@@ -438,7 +446,7 @@ async fn dispatch(
         None => "unknown",
     };
 
-    print!("{} {} from {}", req.method(), req.uri().path(), user_agent);
+    print!("[{}] {} {} from {}", chrono::Local::now().format("%Y-%m-%dT%H:%M:%SZ"), req.method(), req.uri().path(), cap_at_n(25, user_agent));
     let res = match req.uri().path() {
         "/new" => new_item(req).await,
         "/all" => all_items(req).await,

@@ -29,6 +29,21 @@ function addItem(name, barcode, location) {
         .catch(error => console.error('Error adding item:', error));
 }
 
+function actualLocation(location) {
+    switch (location) {
+        case 'l':
+            return 'Levi Fox Hall Tech Box'
+        case 'r':
+            return 'Rig'
+        case 'd':
+            return 'Drama Studio Tech Box'
+        case 's':
+            return 'Storage outside Levi Fox Hall Tech Box'
+        case _:
+            return location
+    }
+}
+
 // modify an item
 function modifyItem(name, barcode, location) {
     let int_barcode = parseInt(barcode);
@@ -36,7 +51,7 @@ function modifyItem(name, barcode, location) {
         console.error('Invalid barcode:', barcode);
         return;
     }
-    const item = { name, "barcode": int_barcode, location };
+    const item = { name, "barcode": int_barcode, "location": actualLocation(location) };
     fetch(`http://${SERVER}/modify`, {
         method: 'POST',
         body: JSON.stringify(item)
@@ -102,10 +117,10 @@ function getAllItemsDOM() {
                     popup.className = 'popup';
                     popup.innerHTML = `
                         <h2>${item.name}</h2>
-                        <button onclick="modifyItemUI('${item.barcode}');getAllItemsDOM()">Modify</button>
-                        <button onclick="deleteItem('${item.barcode}');getAllItemsDOM()">Delete</button>
-                        <button onclick="logItem('${item.barcode}');getAllItemsDOM()">Log</button>
-                        <button onclick="closePopup();getAllItemsDOM()">Close</button>
+                        <button onclick="closePopup();modifyItemUI('${item.barcode}');getAllItemsDOM()">Modify</button>
+                        <button onclick="deleteItem('${item.barcode}');closePopup();getAllItemsDOM()">Delete</button>
+                        <button onclick="logItem('${item.barcode}');closePopup();getAllItemsDOM()">Log</button>
+                        <button onclick="closePopup();closePopup();getAllItemsDOM()">Close</button>
                     `;
                     document.body.appendChild(popup);
                     popup.style.display = 'block';
@@ -195,4 +210,4 @@ function closePopup() {
 }
 
 // refresh every 5s
-setInterval(getAllItemsDOM, 5000);
+setInterval(getAllItemsDOM, 10000);
