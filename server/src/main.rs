@@ -10,7 +10,7 @@ use hyper::{
 use hyper_util::rt::TokioIo;
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
-use std::{env, net::SocketAddr};
+use std::{env, fs, io::Read, net::SocketAddr};
 use tokio::net::TcpListener;
 
 /**
@@ -190,7 +190,6 @@ async fn new_item(
         *resp.status_mut() = hyper::StatusCode::BAD_REQUEST;
         return Ok(resp);
     }
-
 
     // now give it a last seen time of now
     let mut item = item.unwrap(); // unwrap is safe because we checked it above
@@ -446,7 +445,13 @@ async fn dispatch(
         None => "unknown",
     };
 
-    print!("[{}] {} {} from {}", chrono::Local::now().format("%Y-%m-%dT%H:%M:%SZ"), req.method(), req.uri().path(), cap_at_n(25, user_agent));
+    print!(
+        "[{}] {} {} from {}",
+        chrono::Local::now().format("%Y-%m-%dT%H:%M:%SZ"),
+        req.method(),
+        req.uri().path(),
+        cap_at_n(25, user_agent)
+    );
     let res = match req.uri().path() {
         "/new" => new_item(req).await,
         "/all" => all_items(req).await,
@@ -454,6 +459,67 @@ async fn dispatch(
         "/modify" => modify_item_endpoint(req).await,
         path if path.starts_with("/delete/") => delete_item_endpoint(req).await,
         path if path.starts_with("/log/") => log_item(req).await,
+        path if path == "/"
+            || path.starts_with("/index.html")
+            || path.starts_with("/style.css")
+            || path.starts_with("/script.js")=>
+        {
+            let path = if path == "/" { "/index.html" } else { path };
+            let resp = fs::read_to_string(format!("../webclient{}", path));
+            let res: Response<BoxBody<Bytes, hyper::Error>>;
+            if resp.is_err() {
+                let mut resp = Response::new(full("Failed to read file"));
+                *resp.status_mut() = hyper::StatusCode::NOT_FOUND;
+                res = resp;
+            } else {
+                let resp = resp.unwrap();
+                let mut resp = Response::new(full(resp));
+                *resp.status_mut() = hyper::StatusCode::OK;
+                let mime = match path {
+                    "/index.html" => "text/html",
+                    "/style.css" => "text/css",
+                    "/script.js" => "application/javascript",
+                    _ => "text/plain",
+                };
+                resp.headers_mut().insert(
+                    hyper::header::CONTENT_TYPE,
+                    hyper::header::HeaderValue::from_static(mime),
+                );
+
+                res = resp;
+            }
+
+            Ok(res)
+        }
+        path if path.starts_with("/favicon.ico") => {
+            let resp = fs::File::open("../webclient/favicon.ico");
+
+            let resp: Result<Vec<u8>, std::io::Error> = resp.and_then(|file| {
+                let mut file = file;
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf).map(|_| buf)
+            });
+
+            let res: Response<BoxBody<Bytes, hyper::Error>>;
+            if resp.is_err() {
+                let mut resp = Response::new(full("Failed to read file"));
+                *resp.status_mut() = hyper::StatusCode::NOT_FOUND;
+                res = resp;
+            } else {
+                let resp = resp.unwrap();
+                let mut resp = Response::new(full(resp));
+                *resp.status_mut() = hyper::StatusCode::OK;
+                resp.headers_mut().insert(
+                    hyper::header::CONTENT_TYPE,
+                    hyper::header::HeaderValue::from_static("image/x-icon"),
+                );
+
+                res = resp;
+            }
+
+            Ok(res)
+        }
+
         _ => {
             let mut resp = Response::new(full("Not found"));
             *resp.status_mut() = hyper::StatusCode::NOT_FOUND;
@@ -504,10 +570,16 @@ fn get_addr() -> SocketAddr {
         let addr = addr.parse::<SocketAddr>();
 
         if addr.is_ok() {
-            println!("Using address from BARCODE_SERVER_ADDR: {}", addr.clone().unwrap());
+            println!(
+                "Using address from BARCODE_SERVER_ADDR: {}",
+                addr.clone().unwrap()
+            );
             return addr.unwrap();
         } else {
-            eprintln!("Invalid address: {}, checking other options", addr.unwrap_err());
+            eprintln!(
+                "Invalid address: {}, checking other options",
+                addr.unwrap_err()
+            );
         }
     }
 
@@ -515,16 +587,25 @@ fn get_addr() -> SocketAddr {
     let config = std::fs::read_to_string(config_path.clone());
 
     if config.is_err() {
-        println!("Using 0.0.0.0:3000 by default, try setting BARCODE_SERVER_ADDR or BARCODE_CFG (config file location)");
+        println!(
+            "Using 0.0.0.0:3000 by default, try setting BARCODE_SERVER_ADDR or BARCODE_CFG (config file location)"
+        );
         SocketAddr::from(([0, 0, 0, 0], 3000))
     } else {
         let addr = config.unwrap().parse::<SocketAddr>();
 
         if addr.is_ok() {
-            println!("Using address from config file ({}): {}", config_path, addr.clone().unwrap());
+            println!(
+                "Using address from config file ({}): {}",
+                config_path,
+                addr.clone().unwrap()
+            );
             addr.unwrap()
         } else {
-            println!("Using 0.0.0.0:3000 by default as address in {} is invalid", config_path);
+            println!(
+                "Using 0.0.0.0:3000 by default as address in {} is invalid",
+                config_path
+            );
             SocketAddr::from(([0, 0, 0, 0], 3000))
         }
     }
