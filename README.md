@@ -6,3 +6,6 @@
 ## termclient
 - CLI client for the server
 - run with `cargo run` (in the termclient directory)
+## webclient
+- web client for the server
+- just a plain HTML page

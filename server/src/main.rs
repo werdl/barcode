@@ -10,7 +10,7 @@ use hyper::{
 use hyper_util::rt::TokioIo;
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
+use std::{env, net::SocketAddr};
 use tokio::net::TcpListener;
 
 /**
@@ -494,10 +494,46 @@ fn setup_if_not_exists() {
     }
 }
 
+fn get_addr() -> SocketAddr {
+    // if the environment variable BARCODE_SERVER_ADDR is set, use that
+    // else use barcode.cfg
+    // else fall back on 0.0.0.0:3000
+
+    if env::var("BARCODE_SERVER_ADDR").is_ok() {
+        let addr = env::var("BARCODE_SERVER_ADDR").unwrap_or_default();
+        let addr = addr.parse::<SocketAddr>();
+
+        if addr.is_ok() {
+            println!("Using address from BARCODE_SERVER_ADDR: {}", addr.clone().unwrap());
+            return addr.unwrap();
+        } else {
+            eprintln!("Invalid address: {}, checking other options", addr.unwrap_err());
+        }
+    }
+
+    let config_path = env::var("BARCODE_CFG").unwrap_or_else(|_| "barcode.cfg".to_string());
+    let config = std::fs::read_to_string(config_path.clone());
+
+    if config.is_err() {
+        println!("Using 0.0.0.0:3000 by default, try setting BARCODE_SERVER_ADDR or BARCODE_CFG (config file location)");
+        SocketAddr::from(([0, 0, 0, 0], 3000))
+    } else {
+        let addr = config.unwrap().parse::<SocketAddr>();
+
+        if addr.is_ok() {
+            println!("Using address from config file ({}): {}", config_path, addr.clone().unwrap());
+            addr.unwrap()
+        } else {
+            println!("Using 0.0.0.0:3000 by default as address in {} is invalid", config_path);
+            SocketAddr::from(([0, 0, 0, 0], 3000))
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     setup_if_not_exists();
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = get_addr();
 
     let listener = TcpListener::bind(addr).await?;
     println!("Listening on http://{}", addr);

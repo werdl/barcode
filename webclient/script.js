@@ -1,5 +1,3 @@
-const SERVER = "127.0.0.1:3000";
-
 // get all items
 function getAllItems() {
     fetch(`http://${SERVER}/all`)
@@ -209,5 +207,73 @@ function closePopup() {
     }
 }
 
+
+
+// Set a cookie
+function setCookie(name, value, days) {
+    const date = new Date();
+    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+    const expires = "expires=" + date.toUTCString();
+    document.cookie = `${name}=${value};${expires};path=/`;
+}
+
+// Get a cookie
+function getCookie(name) {
+    const nameEQ = name + "=";
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+        let cookie = cookies[i].trim();
+        if (cookie.indexOf(nameEQ) === 0) {
+            return cookie.substring(nameEQ.length, cookie.length);
+        }
+    }
+    return null;
+}
+
+// Initialize SERVER from cookie or default value
+let SERVER = getCookie('server') || "127.0.0.1";
+
+checkForRun();
+
 // refresh every 5s
 setInterval(getAllItemsDOM, 10000);
+
+function checkForRun() {
+    const timer = setTimeout(() => {
+        console.error('Server is not running');
+        SERVER = prompt('Server is not running. Please enter the server address:', SERVER);
+        if (SERVER) {
+            setCookie('server', SERVER, 7); // Save server address in cookie for 7 days
+            location.reload();
+        }
+    }, 3000);
+
+    fetch(`http://${SERVER}/all`)
+        .then(response => {
+            if (response.ok) {
+                clearTimeout(timer);
+                console.log('Server is running');
+                getAllItemsDOM();
+            } else {
+                console.error('Server is not running');
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching item 42:', error);
+            SERVER = prompt('Server is not running. Please enter the server address:', SERVER);
+            if (SERVER) {
+                setCookie('server', SERVER, 7); // Save server address in cookie for 7 days
+                location.reload();
+            }
+        });
+}
+
+function clearCookies() {
+    const cookies = document.cookie.split("; ");
+    for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i];
+        const eqPos = cookie.indexOf("=");
+        const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+    }
+}
