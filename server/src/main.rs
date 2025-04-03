@@ -1,7 +1,11 @@
 use chrono::Utc;
 use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::{
-    body::{Body, Bytes, Incoming}, header::USER_AGENT, server::conn::http1, service::service_fn, Request, Response
+    Request, Response,
+    body::{Body, Bytes, Incoming},
+    header::USER_AGENT,
+    server::conn::http1,
+    service::service_fn,
 };
 use hyper_util::rt::TokioIo;
 use rusqlite::{Connection, params};
@@ -124,11 +128,12 @@ pub fn delete_item(barcode: &str) -> Result<(), String> {
 
 pub fn modify_item(item: Item) -> Result<(), String> {
     let conn = Connection::open(DB_NAME).map_err(|e| e.to_string())?;
-    let rows_affected = conn.execute(
-        "UPDATE items SET name = ?1, location = ?2, last_seen = ?3 WHERE barcode = ?4",
-        params![item.name, item.location, item.last_seen, item.barcode],
-    )
-    .map_err(|e| e.to_string())?;
+    let rows_affected = conn
+        .execute(
+            "UPDATE items SET name = ?1, location = ?2, last_seen = ?3 WHERE barcode = ?4",
+            params![item.name, item.location, item.last_seen, item.barcode],
+        )
+        .map_err(|e| e.to_string())?;
 
     if rows_affected == 0 {
         return Err("Item not found".to_string());
@@ -149,7 +154,10 @@ fn ok() -> BoxBody<Bytes, hyper::Error> {
 
 /// remove all non-alphanumeric characters from a string (all fields can have this applied)
 fn sanitize(s: &str) -> String {
-    s.replace(|c: char| !c.is_ascii_alphanumeric() && !c.is_ascii_whitespace(), "")
+    s.replace(
+        |c: char| !c.is_ascii_alphanumeric() && !c.is_ascii_whitespace(),
+        "",
+    )
 }
 
 impl Item {
@@ -219,10 +227,14 @@ async fn all_items(
         return Ok(resp);
     }
 
-    let items: Vec<Item> = items.unwrap().iter_mut().map(|i| {
-        i.sanitize();
-        i.clone()
-    }).collect();
+    let items: Vec<Item> = items
+        .unwrap()
+        .iter_mut()
+        .map(|i| {
+            i.sanitize();
+            i.clone()
+        })
+        .collect();
 
     let items_json = serde_json::to_string(&items);
 
@@ -446,7 +458,14 @@ async fn dispatch(
         eprintln!(" -> Couldn't process request (unknown error)");
     }
 
-    res
+    res.map(|mut resp| {
+        // add CORS headers
+        resp.headers_mut().insert(
+            hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            hyper::header::HeaderValue::from_static("*"),
+        );
+        resp
+    })
 }
 
 fn setup_if_not_exists() {
